@@ -13,6 +13,16 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    overrides: [
+      {
+        files: ["src/api/generated.ts"],
+        rules: {
+          "react-hooks/immutability": "off",
+        },
+      },
+    ],
+  },
 ]);
 
 export default eslintConfig;

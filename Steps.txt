@@ -1,0 +1,116 @@
+WEB3 AUTH DASHBOARD — FULL PROJECT REPORT
+
+Summary
+- Goal: Sign users in with their Ethereum wallet (SIWE) and issue JWT access tokens plus DB‑backed refresh tokens. Simple dashboard UI to trigger the flow.
+- Structure: Monorepo with frontend (Next.js), backend (NestJS + Prisma + Postgres), and contracts (Hardhat).
+
+Repository Layout
+- frontend: Next.js 16 (App Router) app with a simple SIWE login component.
+- backend: NestJS 11 API with Prisma, JWT, Swagger, SIWE verification, and Postgres persistence.
+- contracts: Hardhat scaffold (not integrated into the app yet).
+
+Technologies Used
+- Frontend: Next.js 16, React 19, TypeScript, Tailwind CSS 4, Ethers v6, SIWE v3.
+- Backend: NestJS 11, Prisma ORM, PostgreSQL, jsonwebtoken, Ethers v6, SIWE v3, Swagger (OpenAPI), Helmet, CORS.
+- Tooling: Orval (generates typed API client), Prettier, ESLint. Hardhat tooling in contracts.
+
+How Authentication Works (SIWE)
+1) Connect wallet in the browser (MetaMask). Frontend requests accounts via `ethers.BrowserProvider`.
+2) Frontend requests a one‑time nonce from `GET /auth/siwe/nonce`.
+3) Frontend builds a SIWE message with the nonce, domain, address, chainId, etc., then asks the wallet to sign it.
+4) Frontend sends `{ message, signature }` to `POST /auth/siwe/verify`.
+5) Backend verifies:
+   - Parses the SIWE message and recovers the signer with `ethers.verifyMessage`.
+   - Checks the nonce in DB (exists, not used, not expired), then marks it used.
+   - Upserts the user and wallet records.
+   - Creates a DB‑stored refresh token (session) valid for 7 days.
+   - Returns a signed JWT access token (15 minutes) and the refresh token.
+6) Frontend can store tokens (e.g., `Authorization: Bearer <accessToken>`) and call protected endpoints. Refresh flow can renew access tokens using the refresh token (endpoint not implemented yet).
+
+Frontend Details (frontend)
+- Entry: `frontend/src/app/page.tsx` renders a simple page with `SiweLogin`.
+- Component: `frontend/src/components/SiweLogin.tsx`
+  - Uses `ethers` to request accounts and sign the SIWE message.
+  - Calls `GET /auth/siwe/nonce` and `POST /auth/siwe/verify` via `fetch`.
+  - Currently logs tokens to console and displays a status message.
+- Styling: Tailwind CSS v4 imported in `frontend/src/styles/globals.css` with CSS variables for light/dark.
+- Config: `frontend/next.config.ts` enables `reactStrictMode`.
+- Note: `frontend/src/api/generated.ts` is produced by Orval and assumes `axios` + `@tanstack/react-query`. Those are not in `frontend/package.json` yet, and the generated client is not used by `SiweLogin` (which uses `fetch`). If you want to use the generated hooks, install and configure them.
+
+Backend Details (backend)
+- App bootstrap: `backend/src/main.ts`
+  - Loads env vars, sets up Swagger at `/docs` and JSON at `/docs-json` (used by Orval).
+  - Listens on `PORT` or defaults to 4000.
+- Modules: `backend/src/app.module.ts` wires `PrismaModule` and `AuthModule`.
+- Prisma service: `backend/src/prisma/prisma.service.ts` connects/disconnects Prisma.
+- Auth feature (`backend/src/auth/*`):
+  - Controller exposes:
+    - `GET /auth/siwe/nonce` → returns `{ nonce }`.
+    - `POST /auth/siwe/verify` → returns `{ accessToken, refreshToken }`.
+  - Service implements nonce generation, signature verification, user/wallet upsert, session creation, and JWT issuing.
+- Data model: see Prisma schema in `backend/prisma/schema.prisma`.
+  - `User(id, createdAt, wallets[], sessions[])`
+  - `Wallet(id, address unique, chainId, userId?)`
+  - `Session(id, refreshToken unique, userId, expiresAt, revoked)`
+  - `Nonce(id, value unique, expiresAt, used)`
+- Security choices:
+  - Nonce TTL ~10 minutes; marked used after verification.
+  - Access token: JWT signed with `JWT_SECRET`, 15 minutes.
+  - Refresh token: random 32‑byte hex stored server‑side, 7 days.
+  - Helmet and CORS available via deps (basic hardening; configure as needed).
+
+API Client Generation (Orval)
+- Config: `frontend/orval.config.js` points to `http://localhost:4000/docs-json` and generates to `frontend/src/api/generated.ts` using `react-query` client with Axios.
+- To use these hooks:
+  - Install: `npm i axios @tanstack/react-query` in `frontend`.
+  - Provide a React Query client at app root.
+  - Set Axios baseURL to the backend (e.g., `http://localhost:4000`).
+  - Replace `fetch` calls in components with generated hooks.
+
+Contracts (contracts)
+- Hardhat config is present (`solidity 0.8.20`) but not integrated with the app yet. No contracts or deployment scripts are currently used in auth.
+
+Local Development Workflow
+1) Database
+   - Create a Postgres instance (e.g., Neon, Docker, local).
+   - Set `DATABASE_URL` in `backend/.env` (not committed) and run:
+     - `npx prisma migrate dev` (create tables) and `npx prisma generate` in `backend`.
+2) Backend
+   - Set `JWT_SECRET` and `PORT` (optional, default 4000) in `backend/.env`.
+   - Install deps: `npm i` in `backend`.
+   - Start dev server: `npm run start:dev`. Swagger at `http://localhost:4000/docs`.
+3) Frontend
+   - Install deps: `npm i` in `frontend`.
+   - Start dev: `npm run dev` (Next.js defaults to `http://localhost:3000`).
+   - Update API base URLs in the frontend to point to the backend port (see “Ports & CORS”).
+4) Optional: Generate API client
+   - Ensure backend running (so `/docs-json` is available).
+   - In `frontend`: `npx orval --config orval.config.js`.
+
+Ports & CORS
+- Backend default port: 4000 (configurable via `PORT`).
+- Frontend dev port: 3000.
+- Current `SiweLogin` uses `http://localhost:3000/auth/...`, which points to the frontend server, not the backend. Either:
+  - Change those URLs to `http://localhost:4000/auth/...`, or
+  - Run backend on port 3000 by setting `PORT=3000` in the backend, or
+  - Proxy `/auth/*` from Next.js to the backend via a rewrite.
+- Ensure CORS on the backend allows the frontend origin when on different ports.
+
+End‑to‑End Flow (Step‑By‑Step)
+1) User clicks “Connect Wallet” → MetaMask account request → address stored in component state.
+2) Frontend GET `/auth/siwe/nonce` → receives `{ nonce }`.
+3) Build SIWE message with domain, address, statement, uri, version, chainId, nonce.
+4) Wallet signs the message → frontend obtains `signature`.
+5) Frontend POST `/auth/siwe/verify` with `{ message, signature }`.
+6) Backend verifies signature and nonce, then issues `{ accessToken, refreshToken }`.
+7) Frontend stores the tokens (not implemented yet) and can call protected APIs.
+
+Notable Gaps / Next Steps
+- Fix API base URL mismatch in `SiweLogin` (3000 vs 4000).
+- Add refresh/access token lifecycle endpoints (refresh, revoke, logout) and guards.
+- Persist and use tokens on the frontend (storage, auth headers, logout UI).
+- Wire `UserService` into a user controller, add an authenticated route example.
+- Configure CORS explicitly on backend for dev and prod.
+- Adopt the Orval client in the frontend or remove if not needed; add `axios` and `@tanstack/react-query` if adopting.
+- Add Prisma migrations and README steps to `backend` for DB setup.
+- Consider rate limiting and SIWE `domain`/`uri` validation in production.
