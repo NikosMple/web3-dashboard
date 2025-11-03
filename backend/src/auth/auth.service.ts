@@ -16,7 +16,8 @@ export class AuthService {
   private readonly ACCESS_TOKEN_EXP_MIN = 15; // minutes
   private readonly REFRESH_TOKEN_EXP_DAYS = 7;
 
-  // ---------- generate nonce ----------
+  // ---------- generate nonce ---------- //
+  // Generate nonce and store it in the database with an expiration time
   async generateNonce(): Promise<{ nonce: string }> {
     try {
       const nonceValue = randomBytes(16).toString('hex');
@@ -38,7 +39,8 @@ export class AuthService {
     }
   }
 
-  // ---------- verify signature ----------
+  // ---------- verify signature ----------//
+  // Verify the SIWE message and signature, then create tokens
   async verifySignature(message: string, signature: string) {
     try {
       // Parse SIWE message

@@ -5,6 +5,12 @@ module.exports = {
       target: "./src/api/generated.ts",
       client: "react-query",
       prettier: true,
+      override: {
+        mutator: {
+          path: "./src/api/axiosInstance.ts",
+          name: "customInstance",
+        },
+      },
     },
   },
 };

@@ -7,22 +7,23 @@
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
   MutationFunction,
+  QueryClient,
   QueryFunction,
   QueryKey,
+  UndefinedInitialDataOptions,
   UseMutationOptions,
   UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import axios from "axios";
-import type { AxiosError, AxiosRequestConfig, AxiosResponse } from "axios";
-
-export const appControllerGetHello = (
-  options?: AxiosRequestConfig,
-): Promise<AxiosResponse<void>> => {
-  return axios.get(`/`, options);
+import { customInstance } from "./axiosInstance";
+export const appControllerGetHello = (signal?: AbortSignal) => {
+  return customInstance<void>({ url: `/`, method: "GET", signal });
 };
 
 export const getAppControllerGetHelloQueryKey = () => {
@@ -31,51 +32,127 @@ export const getAppControllerGetHelloQueryKey = () => {
 
 export const getAppControllerGetHelloQueryOptions = <
   TData = Awaited<ReturnType<typeof appControllerGetHello>>,
-  TError = AxiosError<unknown>,
+  TError = unknown,
 >(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof appControllerGetHello>>,
-    TError,
-    TData
+  query?: Partial<
+    UseQueryOptions<
+      Awaited<ReturnType<typeof appControllerGetHello>>,
+      TError,
+      TData
+    >
   >;
-  axios?: AxiosRequestConfig;
 }) => {
-  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+  const { query: queryOptions } = options ?? {};
 
   const queryKey = queryOptions?.queryKey ?? getAppControllerGetHelloQueryKey();
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof appControllerGetHello>>
-  > = ({ signal }) => appControllerGetHello({ signal, ...axiosOptions });
+  > = ({ signal }) => appControllerGetHello(signal);
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof appControllerGetHello>>,
     TError,
     TData
-  > & { queryKey: QueryKey };
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
 };
 
 export type AppControllerGetHelloQueryResult = NonNullable<
   Awaited<ReturnType<typeof appControllerGetHello>>
 >;
-export type AppControllerGetHelloQueryError = AxiosError<unknown>;
+export type AppControllerGetHelloQueryError = unknown;
 
 export function useAppControllerGetHello<
   TData = Awaited<ReturnType<typeof appControllerGetHello>>,
-  TError = AxiosError<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof appControllerGetHello>>,
-    TError,
-    TData
-  >;
-  axios?: AxiosRequestConfig;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  TError = unknown,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof appControllerGetHello>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof appControllerGetHello>>,
+          TError,
+          Awaited<ReturnType<typeof appControllerGetHello>>
+        >,
+        "initialData"
+      >;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useAppControllerGetHello<
+  TData = Awaited<ReturnType<typeof appControllerGetHello>>,
+  TError = unknown,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof appControllerGetHello>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof appControllerGetHello>>,
+          TError,
+          Awaited<ReturnType<typeof appControllerGetHello>>
+        >,
+        "initialData"
+      >;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useAppControllerGetHello<
+  TData = Awaited<ReturnType<typeof appControllerGetHello>>,
+  TError = unknown,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof appControllerGetHello>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+
+export function useAppControllerGetHello<
+  TData = Awaited<ReturnType<typeof appControllerGetHello>>,
+  TError = unknown,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof appControllerGetHello>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
   const queryOptions = getAppControllerGetHelloQueryOptions(options);
 
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
 
   query.queryKey = queryOptions.queryKey;
 
@@ -85,10 +162,12 @@ export function useAppControllerGetHello<
 /**
  * @summary Generate a random nonce for SIWE
  */
-export const authControllerGetNonce = (
-  options?: AxiosRequestConfig,
-): Promise<AxiosResponse<unknown>> => {
-  return axios.get(`/auth/siwe/nonce`, options);
+export const authControllerGetNonce = (signal?: AbortSignal) => {
+  return customInstance<unknown>({
+    url: `/auth/siwe/nonce`,
+    method: "GET",
+    signal,
+  });
 };
 
 export const getAuthControllerGetNonceQueryKey = () => {
@@ -97,56 +176,131 @@ export const getAuthControllerGetNonceQueryKey = () => {
 
 export const getAuthControllerGetNonceQueryOptions = <
   TData = Awaited<ReturnType<typeof authControllerGetNonce>>,
-  TError = AxiosError<unknown>,
+  TError = unknown,
 >(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof authControllerGetNonce>>,
-    TError,
-    TData
+  query?: Partial<
+    UseQueryOptions<
+      Awaited<ReturnType<typeof authControllerGetNonce>>,
+      TError,
+      TData
+    >
   >;
-  axios?: AxiosRequestConfig;
 }) => {
-  const { query: queryOptions, axios: axiosOptions } = options ?? {};
+  const { query: queryOptions } = options ?? {};
 
   const queryKey =
     queryOptions?.queryKey ?? getAuthControllerGetNonceQueryKey();
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof authControllerGetNonce>>
-  > = ({ signal }) => authControllerGetNonce({ signal, ...axiosOptions });
+  > = ({ signal }) => authControllerGetNonce(signal);
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof authControllerGetNonce>>,
     TError,
     TData
-  > & { queryKey: QueryKey };
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
 };
 
 export type AuthControllerGetNonceQueryResult = NonNullable<
   Awaited<ReturnType<typeof authControllerGetNonce>>
 >;
-export type AuthControllerGetNonceQueryError = AxiosError<unknown>;
+export type AuthControllerGetNonceQueryError = unknown;
 
+export function useAuthControllerGetNonce<
+  TData = Awaited<ReturnType<typeof authControllerGetNonce>>,
+  TError = unknown,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof authControllerGetNonce>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof authControllerGetNonce>>,
+          TError,
+          Awaited<ReturnType<typeof authControllerGetNonce>>
+        >,
+        "initialData"
+      >;
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useAuthControllerGetNonce<
+  TData = Awaited<ReturnType<typeof authControllerGetNonce>>,
+  TError = unknown,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof authControllerGetNonce>>,
+        TError,
+        TData
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof authControllerGetNonce>>,
+          TError,
+          Awaited<ReturnType<typeof authControllerGetNonce>>
+        >,
+        "initialData"
+      >;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useAuthControllerGetNonce<
+  TData = Awaited<ReturnType<typeof authControllerGetNonce>>,
+  TError = unknown,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof authControllerGetNonce>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
 /**
  * @summary Generate a random nonce for SIWE
  */
 
 export function useAuthControllerGetNonce<
   TData = Awaited<ReturnType<typeof authControllerGetNonce>>,
-  TError = AxiosError<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof authControllerGetNonce>>,
-    TError,
-    TData
-  >;
-  axios?: AxiosRequestConfig;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  TError = unknown,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<
+        Awaited<ReturnType<typeof authControllerGetNonce>>,
+        TError,
+        TData
+      >
+    >;
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
   const queryOptions = getAuthControllerGetNonceQueryOptions(options);
 
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
 
   query.queryKey = queryOptions.queryKey;
 
@@ -156,14 +310,16 @@ export function useAuthControllerGetNonce<
 /**
  * @summary Verify SIWE signature and return tokens
  */
-export const authControllerVerify = (
-  options?: AxiosRequestConfig,
-): Promise<AxiosResponse<unknown>> => {
-  return axios.post(`/auth/siwe/verify`, undefined, options);
+export const authControllerVerify = (signal?: AbortSignal) => {
+  return customInstance<unknown>({
+    url: `/auth/siwe/verify`,
+    method: "POST",
+    signal,
+  });
 };
 
 export const getAuthControllerVerifyMutationOptions = <
-  TError = AxiosError<unknown>,
+  TError = unknown,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -172,7 +328,6 @@ export const getAuthControllerVerifyMutationOptions = <
     void,
     TContext
   >;
-  axios?: AxiosRequestConfig;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof authControllerVerify>>,
   TError,
@@ -180,19 +335,19 @@ export const getAuthControllerVerifyMutationOptions = <
   TContext
 > => {
   const mutationKey = ["authControllerVerify"];
-  const { mutation: mutationOptions, axios: axiosOptions } = options
+  const { mutation: mutationOptions } = options
     ? options.mutation &&
       "mutationKey" in options.mutation &&
       options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, axios: undefined };
+    : { mutation: { mutationKey } };
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof authControllerVerify>>,
     void
   > = () => {
-    return authControllerVerify(axiosOptions);
+    return authControllerVerify();
   };
 
   return { mutationFn, ...mutationOptions };
@@ -202,23 +357,22 @@ export type AuthControllerVerifyMutationResult = NonNullable<
   Awaited<ReturnType<typeof authControllerVerify>>
 >;
 
-export type AuthControllerVerifyMutationError = AxiosError<unknown>;
+export type AuthControllerVerifyMutationError = unknown;
 
 /**
  * @summary Verify SIWE signature and return tokens
  */
-export const useAuthControllerVerify = <
-  TError = AxiosError<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof authControllerVerify>>,
-    TError,
-    void,
-    TContext
-  >;
-  axios?: AxiosRequestConfig;
-}): UseMutationResult<
+export const useAuthControllerVerify = <TError = unknown, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof authControllerVerify>>,
+      TError,
+      void,
+      TContext
+    >;
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
   Awaited<ReturnType<typeof authControllerVerify>>,
   TError,
   void,
@@ -226,5 +380,5 @@ export const useAuthControllerVerify = <
 > => {
   const mutationOptions = getAuthControllerVerifyMutationOptions(options);
 
-  return useMutation(mutationOptions);
+  return useMutation(mutationOptions, queryClient);
 };

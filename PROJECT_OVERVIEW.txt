@@ -1,0 +1,134 @@
+Web3 Auth Dashboard — Project Overview
+
+Goal
+- Enable “Sign-In With Ethereum” (SIWE): the user signs a wallet challenge, backend verifies it, then issues a short-lived JWT access token and a DB-backed refresh token.
+
+Architecture
+- Monorepo with three parts:
+  - frontend (Next.js 16, React 19, TypeScript, Tailwind 4, Ethers v6, SIWE v3)
+  - backend (NestJS 11, Prisma ORM, PostgreSQL, jsonwebtoken, Ethers v6, SIWE v3, Swagger)
+  - contracts (Hardhat scaffold, not used in the auth flow yet)
+
+Repository Structure
+- frontend/ … Next.js app and SIWE UI
+- backend/ … NestJS API, Prisma schema, SIWE verification, Swagger docs
+- contracts/ … Hardhat config and tooling (no auth integration currently)
+
+End-to-End SIWE Flow (Step-by-Step)
+1) Wallet connect (frontend): request accounts via ethers BrowserProvider and capture the user address.
+2) Nonce (frontend → backend): call GET /auth/siwe/nonce to get a one-time challenge.
+3) Message build (frontend): construct SiweMessage with domain, address, statement, uri, version, chainId, and nonce; prepareMessage().
+4) Signature (frontend): ask the wallet to sign the prepared SIWE message.
+5) Verification (frontend → backend): POST { message, signature } to /auth/siwe/verify.
+6) Token issuance (backend): verify signature and nonce, upsert user & wallet, create a DB session with a refresh token, sign a 15m JWT access token, and return both.
+7) Usage (frontend): store tokens and include Authorization: Bearer <accessToken> on subsequent API calls. (Refresh endpoint not implemented yet.)
+
+Backend (NestJS + Prisma)
+- backend/src/main.ts
+  - Loads env, starts Nest app, sets Swagger UI at /docs and OpenAPI JSON at /docs-json (used by Orval), listens on PORT (default 4000).
+- backend/src/app.module.ts
+  - Root module; imports PrismaModule and AuthModule; wires AppController and AppService.
+- backend/src/app.controller.ts, backend/src/app.service.ts
+  - Simple health/demo endpoint at GET / returning a hello string.
+- backend/src/prisma/prisma.module.ts, backend/src/prisma/prisma.service.ts
+  - Global Prisma provider for DI; handles $connect/$disconnect lifecycle.
+- backend/src/auth/auth.module.ts
+  - Auth feature module that registers the controller and service; imports PrismaModule.
+- backend/src/auth/auth.controller.ts
+  - GET /auth/siwe/nonce → returns { nonce } (Swagger-documented).
+  - POST /auth/siwe/verify → accepts { message, signature }, returns { accessToken, refreshToken } (Swagger-documented).
+- backend/src/auth/auth.service.ts
+  - generateNonce(): creates a random nonce, stores it (expires ~10 minutes), returns it.
+  - verifySignature(message, signature):
+    - Parses SIWE, recovers signer with ethers.verifyMessage, compares to siweMessage.address.
+    - Validates nonce (exists, unused, not expired), marks it used.
+    - Upserts User(id) and Wallet(address, chainId), associates them.
+    - Creates Session with random 32-byte refresh token (valid 7 days).
+    - Signs JWT access token (15 minutes) with process.env.JWT_SECRET.
+    - Returns { accessToken, refreshToken }.
+- backend/prisma/schema.prisma
+  - Models:
+    - User(id, createdAt, wallets[], sessions[])
+    - Wallet(id, address unique, chainId, userId?)
+    - Session(id, refreshToken unique, userId, createdAt, expiresAt, revoked)
+    - Nonce(id, value unique, expiresAt, used, createdAt)
+  - Datasource: PostgreSQL via DATABASE_URL.
+- backend/.env (not committed)
+  - Expected keys: DATABASE_URL, JWT_SECRET, optional PORT.
+
+Frontend (Next.js)
+- frontend/src/app/layout.tsx
+  - Root layout, global styles and basic metadata.
+- frontend/src/app/page.tsx
+  - Renders the SIWE login component.
+- frontend/src/components/SiweLogin.tsx
+  - Client component that implements the SIWE flow:
+    - Requests wallet accounts using ethers.BrowserProvider.
+    - Calls GET /auth/siwe/nonce to retrieve the nonce.
+    - Builds and signs a SiweMessage.
+    - Calls POST /auth/siwe/verify with { message, signature }.
+    - Saves tokens via saveTokens() and updates UI status.
+  - Note: Some UI strings have encoding artifacts that can be cleaned up.
+- frontend/src/lib/auth.ts
+  - Token helpers using localStorage: saveTokens, getAccessToken, getRefreshToken, clearTokens.
+- frontend/src/api/axiosInstance.ts
+  - Axios instance with baseURL http://localhost:4000 and a request interceptor adding Authorization: Bearer <accessToken> when present.
+  - Exports customInstance wrapper that returns response.data (used by Orval-generated client).
+- frontend/src/api/generated.ts
+  - Orval-generated React Query client from backend /docs-json.
+  - Provides functions and hooks for calling backend endpoints (e.g., authControllerGetNonce, authControllerVerify).
+  - Important: The current OpenAPI spec likely lacks a proper requestBody schema for verify; Orval’s authControllerVerify doesn’t accept body data. See “Orval notes” below.
+- frontend/orval.config.js
+  - Points to http://localhost:4000/docs-json, generates to src/api/generated.ts, uses customInstance from axiosInstance.ts.
+- frontend/src/styles/globals.css
+  - Tailwind v4 import, base CSS variables, and light/dark handling.
+
+Contracts (Hardhat)
+- contracts/hardhat.config.js
+  - Hardhat toolbox with Solidity 0.8.20, default hardhat network.
+- contracts/package.json
+  - Dev tooling for Hardhat, TypeChain, coverage, etc.
+- No Solidity contracts are currently used by the auth flow.
+
+API Client Generation (Orval) — Notes
+- The backend exposes /docs-json (OpenAPI) and /docs (Swagger UI). Orval consumes /docs-json to generate typed clients and React Query hooks.
+- In auth.controller.ts, the verify endpoint uses an inline type in @Body(). Nest Swagger often requires either:
+  - a DTO class with decorators, or
+  - an explicit @ApiBody({ schema: ... })
+  to emit a proper requestBody in the OpenAPI spec. Without this, Orval generates a POST with no typed body argument.
+- Options to fix usage:
+  1) Add a DTO or @ApiBody for verify and re-generate with Orval, or
+  2) Bypass the generated function for verify and call axiosInstance.post("/auth/siwe/verify", { message, signature }).
+
+Local Development
+1) Database
+   - Provision Postgres (local/Docker/Neon/etc.). Set backend/.env → DATABASE_URL.
+   - In backend/: run npx prisma migrate dev and npx prisma generate to create tables and client.
+2) Backend
+   - backend/.env: set JWT_SECRET (required), PORT optional (default 4000).
+   - npm i, then npm run start:dev. Visit http://localhost:4000/docs and /docs-json.
+3) Frontend
+   - npm i, then npm run dev (Next.js on http://localhost:3000).
+   - Ensure SIWE API calls target the backend port (e.g., axios baseURL is http://localhost:4000).
+4) Orval (optional)
+   - With backend running: in frontend/, run npx orval --config orval.config.js to generate src/api/generated.ts.
+   - Provide a React Query client at app root if using the generated hooks.
+
+Ports & CORS
+- Backend: default 4000; Frontend: default 3000.
+- If calling backend from frontend on different ports, configure CORS on the backend to allow the frontend origin.
+- Alternatively, proxy backend routes from Next.js (rewrites) or run backend on port 3000 during development.
+
+Security & Token Lifecycle
+- Nonce TTL ~10 minutes; marked used upon successful verification to prevent replay.
+- Access token: JWT (15m) signed with JWT_SECRET.
+- Refresh token: random 32-byte hex stored in Session; valid 7 days; server-side revocation possible.
+- Consider adding rate limiting, SIWE domain/uri validation matching your production domain, and HTTPS-only cookies if migrating to cookie-based auth.
+
+Gaps / Next Steps
+- Verify endpoint OpenAPI body: add DTO or @ApiBody so Orval generates a function that accepts { message, signature }.
+- Refresh & revoke endpoints: implement refresh, logout, and guard-protected routes; add JWT guard on sample endpoints.
+- Frontend polish: clean up encoding artifacts in messages; add logout and token display; optionally adopt React Query hooks.
+- CORS: set explicit allowed origins for dev/prod.
+- Contracts: either remove the unused scaffold or add contracts and usage if needed by future features.
+
